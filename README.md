@@ -3,7 +3,7 @@ For the final project
 
 
 The algorithm hasn't been determined yet.
-We've now reconstructing and the project's key algorithm.
+We've now reconstructing the project's key algorithm.
 After the refresh, new announcement will come up.
 
 *** Current files are just dummy of some trials. 
