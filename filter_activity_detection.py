@@ -1,5 +1,5 @@
 # USAGE
-# python filter_activity_recognition.py --prototxt MobileNetSSD_deploy.prototxt.txt --model MobileNetSSD_deploy.caffemodel
+# python filter_activity_detection.py --prototxt MobileNetSSD_deploy.prototxt.txt --model MobileNetSSD_deploy.caffemodel
 
 # import the necessary packages
 import numpy as np
@@ -13,9 +13,14 @@ from numpy import array
 from tensorflow.keras import layers
 from tensorflow.keras.models import load_model
 
-size_grid = 6
-x_grid = 2
-y_grid = 3
+size_grid = 24
+x_grid = 4
+y_grid = 6
+size_sample = 30
+size_batch = 10
+
+#load the LSTM model
+model = load_model('C:/Users/zoclz/models/2finalmodel2.h5') 
 
 # construct the argument parse and parse the arguments
 ap = argparse.ArgumentParser()
@@ -45,21 +50,18 @@ print("[INFO] loading model...")
 net = cv2.dnn.readNetFromCaffe(args["prototxt"], args["model"])
 
 # initialize the video
-cap = cv2.VideoCapture('C:/Users/zoclz/clappingTest.avi')
-# write on video
-fcc = cv2.VideoWriter_fourcc(*'DIVX')
-out = cv2.VideoWriter('detected.avi', fcc, 20.0, (int(cap.get(3)), int(cap.get(4))))
+cap = cv2.VideoCapture('C:/Users/zoclz/clappingTest2.avi')
+
 
 # loop over the frames from the video stream
-count = 0  #count of frame
+count_frame = 0  #count of human frame
 beforeframe = []
-for i in range(0,size_grid):
-	beforeframe.append([])
+
 label = ""
     
 while cap.isOpened():
-    
-	score = 0.0  #for evaluation    
+  
+	score = 0.0  #for evaluation, reset as well    
     
 # grab the frame from the threaded video stream and resize it
 	# to have a maximum width of 400 pixels
@@ -68,8 +70,6 @@ while cap.isOpened():
 	if (ret != True):
 		break
 	frame = cv2.resize(frame, None, fx =0.3, fy=0.3, interpolation=cv2.INTER_AREA)
-	count += 1
-    
 
 	# grab the frame dimensions and convert it to a blob
 	(h, w) = frame.shape[:2]
@@ -80,7 +80,8 @@ while cap.isOpened():
 	# predictions
 	net.setInput(blob)
 	detections = net.forward()
-    
+
+	currentframe = []
 
 	# loop over the detections
 	for i in np.arange(0, detections.shape[2]):
@@ -106,6 +107,7 @@ while cap.isOpened():
 			(startX, startY, endX, endY) = box.astype("int")
             
 ###########################
+			count_frame += 1
 
 			#store grid points' pixel difference
 			#human part will divded 10 x 20 
@@ -120,39 +122,37 @@ while cap.isOpened():
 					x_c = startX + int(x_i*x_div)
 					y_c = startY + int(y_i*y_div)
 					gray = frame[y_c, x_c, :3].dot([0.299, 0.587, 0.114])
+					currentframe.append(gray)
                     
-					if count <= 5:
-						beforeframe[index].append(gray)
-					else:
-						temp0 = beforeframe[index][1]
-						temp1 = beforeframe[index][2]
-						temp2 = beforeframe[index][3]
-						temp3 = beforeframe[index][4]                        
-						beforeframe[index][0] = temp0
-						beforeframe[index][1] = temp1
-						beforeframe[index][2] = temp2
-						beforeframe[index][3] = temp3  
-						beforeframe[index][4] = gray                        
-                   
-						# demonstrate prediction
-						for i in range(0,size_grid):
-							model = load_model('C:/Users/zoclz/models/6model%d.h5'%i)
-							temp0 = beforeframe[i][1] - beforeframe[i][0]
-							temp1 = beforeframe[i][2] - beforeframe[i][1]
-							temp2 = beforeframe[i][3] - beforeframe[i][2]
-							x_input = array([temp0, temp1, temp2])
-							x_input = x_input.reshape((1, 3, 1))
-							yhat = model.predict(x_input, verbose=0)
-							yhat += beforeframe[i][3]        
-							print("%d th model finished"%i)
-							del model                    
-							####evaluation, round(255 /100*5) = 13, scroe += 100 / size_grid 
-							if (gray>= yhat - 13) & (gray <= yhat +13) :
-								score += 100/size_grid
+			if count_frame <= size_sample : #from count_frame == 21, beforeframe has 20 inputs
+				beforeframe.append(currentframe)
+				continue                
+			else:                
+				#predict                
+				startframe = count_frame - size_sample
+				t_step = size_sample - 1
+				inputframe = []
+				for j in range(startframe, startframe + t_step):
+					inputframe.append([beforeframe[j][k] - beforeframe[j-1][k] for k in range(size_grid)])
+
+				inputs = []                    
+				for j in range(30) : inputs.append(inputframe)                    
+				x_input = np.array(inputs)                
+				x_input = x_input.reshape((30, t_step, size_grid))                            
+				yhat = model.predict(x_input, verbose=0)                
+				predictframe = [beforeframe[t_step][k] + yhat[k] for k in range(size_grid)]
+                
+                #after the prediction
+				beforeframe.append(currentframe)                
+                
+				####evaluation, round(255 /100*5) = 13, scroe += 100 / size_grid 
+				for j in range(size_grid):
+					if (currentframe[j]>= predictframe[j] - 13) & (currentframe[j] <= predictframe[j] +13) :
+						score += 100/size_grid
 
                         
-			# draw the prediction on the frame                        
-			if score > 60:
+				# draw the prediction on the frame                        
+			if score > 80:
 				print('--------clapping detected--------')
 				label = "{}: {:.2f}%".format('clapping person',
 					score)
@@ -161,7 +161,6 @@ while cap.isOpened():
 				y = startY - 15 if startY - 15 > 15 else startY + 15
 				cv2.putText(frame, label, (startX, y),
 				cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)       
-				cv2.imwrite('detectedclappingfrom%dthframe.jpg'%count, frame)
                 
 			#when there's no prediction                
 			else : 
@@ -174,19 +173,15 @@ while cap.isOpened():
 				cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[idx], 2)
              
 	# show the output frame ... too slow to show
-	#cv2.imshow("Frame", frame)
-	out.write(frame)                      
-	print("%d th frame finished" %count)
+	cv2.imshow("Frame", frame)
+
     
-	#FPS = 3
-	cv2.waitKey(500)
     
 	if cv2.waitKey(1) & 0xFF == ord('q'):
 		break
-
-print(label)        
+        
 cap.release()
-out.release()                    
+                   
 
 # do a bit of cleanup
 cv2.destroyAllWindows()

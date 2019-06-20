@@ -29,7 +29,7 @@ CLASSES = ["background", "aeroplane", "bicycle", "bird", "boat",
 	"bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
 	"dog", "horse", "motorbike", "person", "pottedplant", "sheep",
 	"sofa", "train", "tvmonitor"]
-IGNORE = set(["aeroplane", "bicycle", "bird", "boat",
+IGNORE = set(["background", "aeroplane", "bicycle", "bird", "boat",
 	"bottle", "bus", "car", "cat", "chair", "cow", "diningtable",
 	"dog", "horse", "motorbike", "pottedplant", "sheep",
 	"sofa", "train", "tvmonitor"])
@@ -43,9 +43,10 @@ net = cv2.dnn.readNetFromCaffe(args["prototxt"], args["model"])
 count_video = 0
 frames = []
 #for the grid
-x_grid = 2
-y_grid = 3
-size_grid = 6
+x_grid = 4
+y_grid = 6
+size_grid = 24
+
 
 for videoFile in glob.glob('D:/Nuri/2019School/DatabaseSystem/videos/selected/clap/clap/*.avi'):
     cap = cv2.VideoCapture(videoFile)   # capturing the video from the given path
@@ -57,10 +58,10 @@ for videoFile in glob.glob('D:/Nuri/2019School/DatabaseSystem/videos/selected/cl
         if (ret != True):
             break
         framesTemp.append(frame)
-    frames.append(framesTemp)
+    frames.append(framesTemp)   #to erase first []
     cap.release()
     count_video += 1
-    
+ 
 print("Sample Frames Capture Finished\n")
 
 human_data = []  #total videos' frames' grid points difference
@@ -108,7 +109,6 @@ for v_index in range(0, count_video):
 				# the object
 				box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
 				(startX, startY, endX, endY) = box.astype("int")
-				croped = np.copy(frame[startY:endY, startX:endX])
                 
             
 				#store grid points' pixel difference
@@ -131,7 +131,7 @@ for v_index in range(0, count_video):
 					continue
             
 				framechange = []
-				for k in range(0, size_grid):
+				for k in range(0, size_grid):   #currentframe has 1 more variable due to [] initialisation
 					framechange.append(int(currentframe[k] - beforeframe[k]))
                 
 				video_data.append(framechange)
@@ -141,20 +141,20 @@ for v_index in range(0, count_video):
 			#end of per detection             
 		#end of per frame
 	print("%d th video finished--" % v_index)
-	#finally one video's frame's meaningful pixel difference will be stored
+	#finally one video's frame's meaningful pixel difference will be stored   
 	human_data.append(video_data)
     
-print("\n-----video difference array finished----\n")    
+print("\n-----video difference array finished----\n") #clap 130 videos checked 0~ 129   
     
     #dataset file creation
-f = open("clap3.txt", "w+")
+f = open("clap2.txt", "w+")
 
-for v_index in range(0, count_video):  #video number
+for v_index in range(count_video):  #video number
 	count_frame = len(human_data[v_index])
-	for f_index in range(0, count_frame):  #frame number
-		f.write("%d %d :" % (v_index + 1, f_index + 1))
+	for f_index in range(1, count_frame+1):  #frame number
+		f.write("%d %d :" % (v_index+1, f_index))
 		for k in range(0, size_grid):
-			f.write(" %d" % human_data[v_index][f_index][k])
+			f.write(" %d" % human_data[v_index][f_index-1][k])
 		f.write("\n")
 #1 1 : 0 0 20 0 30 0 5 ...
 f.close()                      
